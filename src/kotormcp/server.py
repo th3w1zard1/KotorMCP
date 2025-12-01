@@ -568,12 +568,13 @@ async def _run_http(port: int = 8000, host: str = "localhost") -> None:
         msg = "uvicorn is required for HTTP mode. Install with: pip install uvicorn[standard]"
         raise ImportError(msg)
 
-    transport = mcp.server.streamable_http.StreamableHTTPServerTransport()
+    # HTTP transport requires mcp_session_id (can be None for new sessions)
+    transport = mcp.server.streamable_http.StreamableHTTPServerTransport(mcp_session_id=None)
 
     async def asgi_app(scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "http":
             method = scope.get("method", "")
-            
+
             if method in ("GET", "POST"):
                 # HTTP streaming transport handles all requests
                 # The transport manages the connection and message flow
