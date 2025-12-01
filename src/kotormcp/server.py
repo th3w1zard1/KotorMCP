@@ -490,7 +490,10 @@ async def _run_stdio() -> None:
             InitializationOptions(
                 server_name="KotorMCP",
                 server_version="0.1.0",
-                capabilities=SERVER.get_capabilities(),
+                capabilities=SERVER.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
+                ),
                 notification_options=NotificationOptions(),
             ),
         )
@@ -501,7 +504,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--mode", choices=["stdio"], default="stdio", help="Transport to use (currently stdio only).")
     args = parser.parse_args(argv)
     if args.mode != "stdio":
-        raise SystemExit("Only stdio mode is supported at the moment.")
+        msg = "Only stdio mode is supported at the moment."
+        raise SystemExit(msg)
     asyncio.run(_run_stdio())
 
 
