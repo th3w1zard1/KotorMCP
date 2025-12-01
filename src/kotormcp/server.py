@@ -20,9 +20,18 @@ import json
 import os
 from collections.abc import Iterable, Iterator
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
+try:
+    from uvicorn import Config, Server as UvicornServer
+except ImportError:
+    UvicornServer = None  # type: ignore[assignment, misc]
+    Config = None  # type: ignore[assignment, misc]
+
+import mcp.server.sse
 import mcp.server.stdio
+import mcp.server.streamable_http
 from mcp import types
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
@@ -479,7 +488,8 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> types.CallTo
         payload = _journal_entries(installation)
         return _json_content({"count": len(payload), "categories": payload})
 
-    raise ValueError(f"Unknown tool '{name}'")
+    msg = f"Unknown tool '{name}'"
+    raise ValueError(msg)
 
 
 async def _run_stdio() -> None:
@@ -499,14 +509,130 @@ async def _run_stdio() -> None:
         )
 
 
+async def _run_sse(port: int = 8000, host: str = "localhost") -> None:
+    """Run the server with SSE (Server-Sent Events) transport.
+
+    The SSE transport uses Server-Sent Events for one-way streaming from server to client,
+    and HTTP POST for client-to-server messages.
+    """
+    if UvicornServer is None or Config is None:
+        msg = "uvicorn is required for SSE mode. Install with: pip install uvicorn[standard]"
+        raise ImportError(msg)
+
+    transport = mcp.server.sse.SseServerTransport(endpoint="/mcp")
+
+    async def asgi_app(scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            method = scope.get("method", "")
+            
+            if method == "GET" and path == "/mcp":
+                # SSE connection - establishes Server-Sent Events stream
+                await transport.connect_sse(scope, receive, send)
+            elif method == "POST" and path == "/mcp":
+                # POST message handling - processes MCP messages from client
+                await transport.handle_post_message(scope, receive, send)
+            else:
+                # 404 for other paths
+                await send({
+                    "type": "http.response.start",
+                    "status": 404,
+                    "headers": [[b"content-type", b"text/plain"]],
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": b"Not Found",
+                })
+        else:
+            msg = f"Unsupported scope type: {scope['type']}"
+            raise ValueError(msg)
+
+    config = Config(
+        app=asgi_app,
+        host=host,
+        port=port,
+        log_level="info",
+    )
+
+    server = UvicornServer(config)
+    await server.serve()
+
+
+async def _run_http(port: int = 8000, host: str = "localhost") -> None:
+    """Run the server with HTTP streaming transport.
+
+    The HTTP streaming transport uses HTTP for bidirectional communication
+    with streaming support for large messages.
+    """
+    if UvicornServer is None or Config is None:
+        msg = "uvicorn is required for HTTP mode. Install with: pip install uvicorn[standard]"
+        raise ImportError(msg)
+
+    transport = mcp.server.streamable_http.StreamableHTTPServerTransport()
+
+    async def asgi_app(scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] == "http":
+            method = scope.get("method", "")
+            
+            if method in ("GET", "POST"):
+                # HTTP streaming transport handles all requests
+                # The transport manages the connection and message flow
+                await transport.handle_request(scope, receive, send)
+            else:
+                await send({
+                    "type": "http.response.start",
+                    "status": 405,
+                    "headers": [[b"content-type", b"text/plain"]],
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": b"Method Not Allowed",
+                })
+        else:
+            msg = f"Unsupported scope type: {scope['type']}"
+            raise ValueError(msg)
+
+    config = Config(
+        app=asgi_app,
+        host=host,
+        port=port,
+        log_level="info",
+    )
+
+    server = UvicornServer(config)
+    await server.serve()
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the KotorMCP server.")
-    parser.add_argument("--mode", choices=["stdio"], default="stdio", help="Transport to use (currently stdio only).")
+    parser.add_argument(
+        "--mode",
+        choices=["stdio", "sse", "http"],
+        default="stdio",
+        help="Transport to use (stdio for command-line, sse for Server-Sent Events, http for HTTP streaming)"
+    )
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="Host to bind to for HTTP/SSE modes (default: localhost)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind to for HTTP/SSE modes (default: 8000)"
+    )
     args = parser.parse_args(argv)
-    if args.mode != "stdio":
-        msg = "Only stdio mode is supported at the moment."
+
+    if args.mode == "stdio":
+        asyncio.run(_run_stdio())
+    elif args.mode == "sse":
+        asyncio.run(_run_sse(port=args.port, host=args.host))
+    elif args.mode == "http":
+        asyncio.run(_run_http(port=args.port, host=args.host))
+    else:
+        msg = f"Unsupported mode: {args.mode}"
         raise SystemExit(msg)
-    asyncio.run(_run_stdio())
 
 
 if __name__ == "__main__":
