@@ -37,7 +37,7 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=0.1.1",
-    "pykotor @ git+https://github.com/th3w1zard1/PyKotor.git@bleeding-edge#subdirectory=Libraries/PyKotor",
+    "pykotor @ git+https://github.com/th3w1zard1/pykotor-lib.git",
 ]
 
 [project.optional-dependencies]
