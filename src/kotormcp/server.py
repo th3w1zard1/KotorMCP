@@ -15,38 +15,25 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
-import sys
+from collections.abc import Iterable, Iterator
 from io import BytesIO
-import hashlib
-from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 import mcp.server.stdio
-import mcp.types as types
+from mcp import types
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
-
-# Ensure local imports work regardless of execution context (mirrors Tools/KotorCLI bootstrap)
-REPO_ROOT = Path(__file__).resolve().parents[5]
-LIBRARIES_PATH = REPO_ROOT / "Libraries"
-PYKOTOR_PATH = LIBRARIES_PATH / "PyKotor" / "src"
-UTILITY_PATH = LIBRARIES_PATH / "Utility" / "src"
-
-for candidate in (PYKOTOR_PATH, UTILITY_PATH):
-    candidate_str = str(candidate)
-    if candidate_str not in sys.path:
-        sys.path.insert(0, candidate_str)
-
-from pykotor.common.misc import Game  # noqa: E402
-from pykotor.extract.file import FileResource, ResourceResult  # noqa: E402
-from pykotor.extract.installation import Installation, SearchLocation  # noqa: E402
-from pykotor.resource.formats.gff.gff_auto import read_gff  # noqa: E402
-from pykotor.resource.formats.tlk.tlk_auto import read_tlk  # noqa: E402
-from pykotor.resource.formats.twoda.twoda_auto import read_2da  # noqa: E402
-from pykotor.resource.type import ResourceType  # noqa: E402
-from pykotor.tools.path import CaseAwarePath, find_kotor_paths_from_default  # noqa: E402
+from pykotor.common.misc import Game
+from pykotor.extract.file import FileResource, ResourceResult
+from pykotor.extract.installation import Installation, SearchLocation
+from pykotor.resource.formats.gff.gff_auto import read_gff
+from pykotor.resource.formats.tlk.tlk_auto import read_tlk
+from pykotor.resource.formats.twoda.twoda_auto import read_2da
+from pykotor.resource.type import ResourceType
+from pykotor.tools.path import CaseAwarePath, find_kotor_paths_from_default
 
 SERVER = Server("KotorMCP")
 
@@ -215,15 +202,15 @@ def _iter_resources_for_location(
                 yield f"texturepack:{filename}", resource
     if lowered in {"streammusic", "all"}:
         installation.load_streammusic()
-        for resource in installation._streammusic:  # noqa: SLF001 - Installation exposes cached lists
+        for resource in installation._streammusic:
             yield "streammusic", resource
     if lowered in {"streamsounds", "all"}:
         installation.load_streamsounds()
-        for resource in installation._streamsounds:  # noqa: SLF001
+        for resource in installation._streamsounds:
             yield "streamsounds", resource
     if lowered in {"streamwaves", "voice", "all"}:
         installation.load_streamwaves()
-        for resource in installation._streamwaves:  # noqa: SLF001
+        for resource in installation._streamwaves:
             yield "streamwaves", resource
 
 
